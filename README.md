@@ -19,3 +19,5 @@ What changed from before
 /md now opens the window instead of starting a run. Use /md start and /md stop for macros.
 The on-screen “DE” button is gone, replaced by the minimap button.
 /md list no longer disturbs a running queue.
+
+<img width="571" height="747" alt="image" src="https://github.com/user-attachments/assets/f6bd24b0-03bc-4cdd-a5c7-497a6fd66d66" />
