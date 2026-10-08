@@ -1,0 +1,8 @@
+## Interface: 11200
+## Title: MassDisenchant
+## Notes: Disenchant everything in your bags with one click. Minimap button or /md
+## Author: You
+## Version: 1.1
+## SavedVariables: MassDisenchantDB
+
+MassDisenchant.lua
