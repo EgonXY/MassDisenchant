@@ -2,7 +2,7 @@
 ## Title: MassDisenchant
 ## Notes: Disenchant everything in your bags with one click. Minimap button or /md
 ## Author: You
-## Version: 1.1
+## Version: 1.2
 ## SavedVariables: MassDisenchantDB
 
 MassDisenchant.lua

@@ -144,6 +144,7 @@ local function Stop(reason)
 end
 
 local attempts = {}   -- failed attempts per item this run
+local runSingle = false  -- true: stop after one item instead of emptying the list
 
 -- Called when a cast never started. Retries once (could be a global
 -- cooldown hiccup), then gives up on the item for this session.
@@ -164,13 +165,17 @@ end
 local function Next()
   Touch()
   if getn(queue) == 0 then
+    if runSingle and (done + failed) > 0 then
+      Finish()
+      return
+    end
     -- Queue is empty: rescan the bags. Picks up items that moved, were
     -- retried, or newly dropped, and only finishes when nothing is left.
     local list = Scan()
     local added = 0
     for i = 1, getn(list) do
       local e = list[i]
-      if not e.ignored and not e.skipped then
+      if not e.ignored and not e.skipped and not (runSingle and added > 0) then
         e.status = "pending"
         table.insert(queue, e)
         table.insert(runList, e)
@@ -233,7 +238,7 @@ local function Fail(msg)
   Touch()
 end
 
-local function Start()
+local function Start(single)
   if state ~= "idle" then
     Say("Already running. Use /md stop to cancel.")
     return
@@ -254,10 +259,20 @@ local function Start()
     Fail("Nothing to disenchant (limit: " .. QNAME[MassDisenchantDB.maxQuality] .. ").")
     return
   end
+  runSingle = single and true or false
+  if runSingle and total > 1 then
+    local first = queue[1]
+    queue = { first }
+    total = 1
+  end
   runList = {}
   for i = 1, total do runList[i] = queue[i] end
   offset = 0
-  Say("Disenchanting " .. total .. " item(s). Move or jump to cancel.")
+  if runSingle then
+    Say("Disenchanting 1 item (hold CTRL when clicking to disenchant everything).")
+  else
+    Say("Disenchanting " .. total .. " item(s). Move or jump to cancel.")
+  end
   Next()
 end
 
@@ -283,6 +298,14 @@ end
 -- UI: rendering
 ----------------------------------------------------------------------
 local Rebuild, Render
+
+-- Label of the main button when idle
+local function StartLabel()
+  if MassDisenchantDB.ctrlForAll and not IsControlKeyDown() then
+    return "Disenchant Next"
+  end
+  return "Disenchant All"
+end
 
 Render = function()
   local f = ui.frame
@@ -386,7 +409,7 @@ Render = function()
     ui.start:Enable()
     ui.refresh:Disable()
   else
-    ui.start:SetText("Disenchant All")
+    ui.start:SetText(StartLabel())
     if ready > 0 then ui.start:Enable() else ui.start:Disable() end
     ui.refresh:Enable()
   end
@@ -480,7 +503,7 @@ local function BuildUI()
   local f = CreateFrame("Frame", "MassDisenchantFrame", UIParent)
   ui.frame = f
   f:SetWidth(380)
-  f:SetHeight(480)
+  f:SetHeight(504)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
   f:SetFrameStrata("DIALOG")
   f:SetMovable(true)
@@ -705,8 +728,28 @@ local function BuildUI()
   ui.start = MakeButton(f, "Disenchant All", 200, 26)
   ui.start:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -428)
   ui.start:SetScript("OnClick", function()
-    if state == "idle" then Start() else Stop("cancelled") end
+    if state ~= "idle" then
+      Stop("cancelled")
+    elseif MassDisenchantDB.ctrlForAll and not IsControlKeyDown() then
+      Start(true)    -- option on, CTRL not held: just one item
+    else
+      Start()        -- everything until the list is empty
+    end
   end)
+  -- keep the label in sync with the CTRL key while the window is open
+  ui.start:SetScript("OnUpdate", function()
+    if state ~= "idle" then return end
+    local want = StartLabel()
+    if this:GetText() ~= want then this:SetText(want) end
+  end)
+  ui.start:SetScript("OnEnter", function()
+    if not MassDisenchantDB.ctrlForAll then return end
+    GameTooltip:SetOwner(this, "ANCHOR_TOP")
+    GameTooltip:AddLine("Click: disenchant the next item", 1, 1, 1)
+    GameTooltip:AddLine("CTRL + click: disenchant everything", 0.4, 0.67, 1)
+    GameTooltip:Show()
+  end)
+  ui.start:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   ui.refresh = MakeButton(f, "Refresh", 130, 26)
   ui.refresh:SetPoint("TOPLEFT", f, "TOPLEFT", 230, -428)
@@ -716,9 +759,29 @@ local function BuildUI()
     Rebuild()
   end)
 
+  -- Option: CTRL + click = everything, plain click = one item
+  local cb = CreateFrame("CheckButton", "MassDisenchantCtrlCheck", f, "UICheckButtonTemplate")
+  cb:SetWidth(24)
+  cb:SetHeight(24)
+  cb:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -458)
+  local cbText = getglobal("MassDisenchantCtrlCheckText")
+  if cbText then
+    cbText:SetText("Hold CTRL to disenchant all (click = one item)")
+    if GameFontHighlightSmall then cbText:SetFontObject(GameFontHighlightSmall) end
+  end
+  cb:SetChecked(MassDisenchantDB.ctrlForAll and 1 or nil)
+  cb:SetScript("OnClick", function()
+    if this:GetChecked() then
+      MassDisenchantDB.ctrlForAll = true
+    else
+      MassDisenchantDB.ctrlForAll = nil
+    end
+    Touch()
+  end)
+
   local hint = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-  hint:SetPoint("TOP", f, "TOPLEFT", 190, -458)
-  hint:SetText("Click an item to protect it")
+  hint:SetPoint("TOP", f, "TOPLEFT", 190, -486)
+  hint:SetText("Click an item in the list to protect it")
 
   BuildMinimapButton()
 end
